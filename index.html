@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MentalStats: Home</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+    
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-container">
+            <h1>MentalStats</h1>
+        </div>
+    </header>
+    <main>
+        <div class="layout-wrapper">
+            <nav class="sidebar">
+                <ul class="nav-links">
+                    <li><a href="#" class="active">Dashboard</a></li>
+                    <li><a href="analytics.html">Analytics</a></li>
+                    <li><a href="demographics.html">Demographics</a></li>
+                    <li><a href="explore.html">Explore</a></li>
+                </ul>
+            </nav>
+            <div class="main-container">
+                <div class="main-head-container">
+                    <div class="main-head">
+                        <h1>Overview Dashboard</h1>
+                    </div>
+                </div>   
+
+                <div class="dashboard-content">
+                    <div class="dashboard-item">
+                        <p>Stress Curve Indicator</p>
+                        <h1 id="stressDeterminator">...</h1> 
+                    </div>
+                    <div class="dashboard-item">
+                        <p>Consultation Curve Indicator</p>
+                        <h1 id="consultDeterminator">...</h1>
+                    </div>
+                    <div class="dashboard-item">
+                        <p>Peak Month of Consults</p>
+                        <h1 id="peakConsultsValue">...</h1>
+                    </div>
+                    <div class="dashboard-item">
+                        <p>Peak Month of Stress</p>
+                        <h1 id="peakStressValue">...</h1>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h2>Correlation of Stress vs Consults per Month (July - Nov)</h2>
+                        </div>
+                        <div class="controls">
+                            <div class="control-group">
+                                <label for="startMonth">Start:</label>
+                                <select id="startMonth"></select>
+                            </div>
+                            <div class="control-group">
+                                <label for="endMonth">End:</label>
+                                <select id="endMonth"></select>
+                            </div>
+                        </div>
+                        <div id="mixedChart" class="d3-container"></div>
+                    </div>
+                    <div class="donut-chart-container">
+                        <h2>Population vs.<br> Sample Size</h2>   
+                        <div id="donutChart" class="d3-container" style="height: 300px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="d3-tooltip" class="tooltip"></div>
+    </main>
+    
+    <footer>
+        <div class="footer-container">
+            <div class="footer-header-container">
+                <h2>MentalStats Inc.</h2>
+                    <div class="footer-information-container">
+                        <p>This website is for educational purposes only. This website is not for actual use and does not intend to be used for fraud or other illegal use</p>
+                    </div>
+            </div>
+        <div class="source-section-container">
+            <div class="source-header-container">
+                <h2>Sources</h2>
+                <div class="source-links-container">
+                    <a href="https://borealisdata.ca/dataset.xhtml?persistentId=doi:10.5683/SP3/VEIBVL">Borealis: University Student Mental Health</a>
+                    <a href="https://www.kaggle.com/datasets/shariful07/student-mental-health">Kaggle: Student Mental Health</a>
+                </div>
+            </div>
+        </div>
+            <div class="source-section-container">
+                <div class="source-header-container">
+                    <h2>Authored By:</h2>
+                    <div class="source-links-container">
+                        <p>Prinze Kyle Santiago</p>
+                    </div>
+                </div>
+                <div class="source-header-container">
+                    <h2>Section:</h2>
+                    <div class="source-links-container">
+                        <p>BSIT-3A</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+    <script>
+        // Global Variables
+        let allMonths = [];
+        let mixedDataRaw = { consults: [], stress: [] };
+        
+        // Tooltip Helpers
+        const tooltip = d3.select("#d3-tooltip");
+        const showTooltip = (event, htmlContent) => {
+            tooltip.transition().duration(200).style("opacity", .9);
+            tooltip.html(htmlContent)
+                .style("left", (event.pageX + 15) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        };
+        const hideTooltip = () => tooltip.transition().duration(500).style("opacity", 0);
+        
+        function getDimensions(id) {
+            const el = document.getElementById(id);
+            if(!el) return { width: 400, height: 400 };
+            const rect = el.getBoundingClientRect();
+            return { width: rect.width, height: rect.height || 350 };
+        }
+
+        // 1. LOAD CSV & PROCESS DATA
+        d3.csv("Final Combined Dataset.csv").then(function(data) {
+            
+            // A. Parsers
+            const parseDate = d3.timeParse("%d/%m/%Y %H:%M");
+            const parseDateISO = d3.timeParse("%Y-%m-%d %H:%M:%S");
+            const formatMonth = d3.timeFormat("%b %Y");
+
+            // B. Aggregate by Month
+            // We use a Map to merge days into months
+            let processedMap = new Map();
+
+            data.forEach(d => {
+                let date = parseDate(d.Timestamp);
+                if (!date) date = parseDateISO(d.Timestamp);
+                if (!date) date = new Date(d.Timestamp);
+                
+                let mStr = formatMonth(date);
+                
+                if (!processedMap.has(mStr)) {
+                    processedMap.set(mStr, { 
+                        monthStr: mStr, 
+                        date: date, // Keep one date for sorting 
+                        scores: [], 
+                        count: 0 
+                    });
+                }
+                let entry = processedMap.get(mStr);
+                entry.count++;
+                entry.scores.push(+d["Stress Index Score"]);
+            });
+
+            // C. Convert to Array & Sort
+            let processed = Array.from(processedMap.values());
+            processed.sort((a, b) => a.date - b.date);
+
+            // D. Populate Global Arrays
+            allMonths = processed.map(d => d.monthStr);
+            mixedDataRaw.consults = processed.map(d => d.count);
+            mixedDataRaw.stress = processed.map(d => d3.mean(d.scores));
+
+            // E. Initialize UI
+            setupDropdowns();
+            
+            // F. Initial Draw (Full Range)
+            const startIndex = 0;
+            const endIndex = allMonths.length - 1;
+            drawMixedChart(startIndex, endIndex);
+            drawDonutChart(); 
+            updateDashboardStats(startIndex, endIndex); // Calculate Initial Stats
+
+            // Resize Event
+            window.addEventListener('resize', () => {
+                const s = document.getElementById('startMonth').selectedIndex;
+                const e = document.getElementById('endMonth').selectedIndex;
+                drawMixedChart(s, e);
+                drawDonutChart();
+            });
+
+        }).catch(err => {
+            console.error(err);
+            document.getElementById('mixedChart').innerHTML = "Error loading CSV. Use Live Server.";
+        });
+
+        // Helper: Calculate Dashboard Stats
+        function updateDashboardStats(startIndex, endIndex) {
+            if (startIndex > endIndex) return;
+
+            // 1. Slice Data based on selection
+            const rangeMonths = allMonths.slice(startIndex, endIndex + 1);
+            const rangeConsults = mixedDataRaw.consults.slice(startIndex, endIndex + 1);
+            const rangeStress = mixedDataRaw.stress.slice(startIndex, endIndex + 1);
+
+            // 2. Calculate Trend (Start Value vs End Value)
+            const getTrend = (arr) => {
+                const startVal = arr[0];
+                const endVal = arr[arr.length - 1];
+                const diff = endVal - startVal;
+                const percent = startVal === 0 ? 0 : ((diff / startVal) * 100).toFixed(1);
+                
+                if (diff > 0) return `↑ ${percent}%`; // Increase
+                if (diff < 0) return `↓ ${Math.abs(percent)}%`; // Decrease
+                return "No Change";
+            };
+
+            const stressTrend = getTrend(rangeStress);
+            const consultTrend = getTrend(rangeConsults);
+
+            // 3. Calculate Peaks (Highest Value in Range)
+            const maxConsults = d3.max(rangeConsults);
+            const peakConsultIdx = rangeConsults.indexOf(maxConsults);
+            const peakConsultMonth = rangeMonths[peakConsultIdx].split(' ')[0]; // Month Name
+
+            const maxStress = d3.max(rangeStress);
+            const peakStressIdx = rangeStress.indexOf(maxStress);
+            const peakStressMonth = rangeMonths[peakStressIdx].split(' ')[0];
+
+            // 4. Update DOM
+            // Stress Trend
+            const stressEl = document.getElementById('stressDeterminator');
+            stressEl.innerText = stressTrend;
+            stressEl.style.color = stressTrend.includes('↑') ? '#FF6384' : (stressTrend.includes('↓') ? '#4BC0C0' : '#333');
+
+            // Consults Trend
+            const consultEl = document.getElementById('consultDeterminator');
+            consultEl.innerText = consultTrend;
+            consultEl.style.color = consultTrend.includes('↑') ? '#36A2EB' : (consultTrend.includes('↓') ? '#FF9F40' : '#333');
+
+            // Peaks
+            document.getElementById('peakConsultsValue').innerText = peakConsultMonth;
+            document.getElementById('peakStressValue').innerText = peakStressMonth;
+        }
+
+        function setupDropdowns() {
+            const startSelect = document.getElementById('startMonth');
+            const endSelect = document.getElementById('endMonth');
+            
+            [startSelect, endSelect].forEach(sel => {
+                sel.innerHTML = "";
+                allMonths.forEach((month, index) => {
+                    const opt = document.createElement('option');
+                    opt.value = index; opt.text = month; sel.appendChild(opt);
+                });
+            });
+
+            startSelect.value = 0; 
+            endSelect.value = allMonths.length - 1;
+
+            const update = () => {
+                const s = startSelect.selectedIndex; 
+                const e = endSelect.selectedIndex;
+                if(s > e) return alert("Invalid Range");
+                
+                drawMixedChart(s, e);
+                updateDashboardStats(s, e);
+            };
+            startSelect.addEventListener('change', update);
+            endSelect.addEventListener('change', update);
+        }
+
+        // Chart 1: Mixed Lines (Consults + Stress)
+        function drawMixedChart(startIndex, endIndex) {
+            d3.select("#mixedChart").html("");
+
+            const labels = allMonths.slice(startIndex, endIndex + 1);
+            const dataConsults = mixedDataRaw.consults.slice(startIndex, endIndex + 1);
+            const dataStress = mixedDataRaw.stress.slice(startIndex, endIndex + 1);
+
+            const { width: cW, height: cH } = getDimensions("mixedChart");
+            const margin = {top: 20, right: 60, bottom: 50, left: 60};
+            const width = cW - margin.left - margin.right;
+            const height = cH - margin.top - margin.bottom;
+
+            const svg = d3.select("#mixedChart").append("svg").attr("width", cW).attr("height", cH)
+                .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleBand().range([0, width]).domain(labels).padding(0.1);
+            const yLeft = d3.scaleLinear().range([height, 0]).domain([0, d3.max(dataConsults) * 1.2]); 
+            const yRight = d3.scaleLinear().range([height, 0]).domain([0, 100]); 
+
+            svg.append("g").attr("transform", `translate(0,${height})`).attr("class", "dark-theme-axis").call(d3.axisBottom(x))
+                .selectAll("text").style("text-anchor", "end").attr("dx", "-.8em").attr("dy", ".15em").attr("transform", "rotate(-35)");
+            svg.append("g").attr("class", "dark-theme-axis").call(d3.axisLeft(yLeft).ticks(5));
+            svg.append("g").attr("transform", `translate(${width},0)`).attr("class", "dark-theme-axis").call(d3.axisRight(yRight).ticks(5));
+
+            svg.append("text").attr("transform", "rotate(-90)").attr("y", -45).attr("x", -height/2).style("text-anchor", "middle").style("fill", "#36A2EB").text("Consults");
+            svg.append("text").attr("transform", "rotate(90)").attr("y", -width - 45).attr("x", height/2).style("text-anchor", "middle").style("fill", "#FF6384").text("Stress Score");
+
+            const defs = svg.append("defs");
+            const gradient = defs.append("linearGradient").attr("id", "chartGradient").attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%");
+            gradient.append("stop").attr("offset", "0%").style("stop-color", "rgba(54, 162, 235, 0.6)");
+            gradient.append("stop").attr("offset", "100%").style("stop-color", "rgba(54, 162, 235, 0.0)");
+
+            svg.append("path").datum(dataConsults)
+                .attr("fill", "url(#chartGradient)").attr("stroke", "#36A2EB").attr("stroke-width", 2)
+                .attr("d", d3.area().x((d, i) => x(labels[i]) + x.bandwidth()/2).y0(height).y1(d => yLeft(d)));
+
+            svg.append("path").datum(dataStress)
+                .attr("fill", "none").attr("stroke", "#FF6384").attr("stroke-width", 3).attr("stroke-dasharray", "5,5")
+                .attr("d", d3.line().x((d, i) => x(labels[i]) + x.bandwidth()/2).y(d => yRight(d)));
+
+            svg.selectAll(".dot-c").data(dataConsults).join("circle").attr("cx", (d, i) => x(labels[i]) + x.bandwidth()/2).attr("cy", d => yLeft(d)).attr("r", 5).attr("fill", "#1a1a1a").attr("stroke", "#36A2EB")
+                .on("mouseover", (e, d) => showTooltip(e, `Consults: ${d}`)).on("mouseout", hideTooltip);
+            
+            svg.selectAll(".dot-s").data(dataStress).join("rect").attr("x", (d, i) => x(labels[i]) + x.bandwidth()/2 - 4).attr("y", d => yRight(d) - 4).attr("width", 8).attr("height", 8).attr("fill", "#FF6384")
+                .on("mouseover", (e, d) => showTooltip(e, `Stress: ${Math.round(d)}`)).on("mouseout", hideTooltip);
+        }
+
+        // Chart 2: Population vs Sample
+        function drawDonutChart() {
+            d3.select("#donutChart").html("");
+            const data = { 'Population': 1591, 'Sample': 311 }; 
+            const { width, height } = getDimensions("donutChart");
+            const radius = Math.min(width, height) / 2 - 20;
+
+            const svg = d3.select("#donutChart").append("svg").attr("width", width).attr("height", height)
+                .append("g").attr("transform", `translate(${width / 2},${height / 2})`);
+
+            const color = d3.scaleOrdinal().range(["#36A2EB", "#FF6384"]);
+            const pie = d3.pie().value(d => d[1]).sort(null);
+            const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
+
+            svg.selectAll('path').data(pie(Object.entries(data))).join('path')
+                .attr('d', arc).attr('fill', d => color(d.data[0])).attr("stroke", "white").style("stroke-width", "2px")
+                .on("mouseover", (e, d) => showTooltip(e, `${d.data[0]}: ${d.data[1]}`))
+                .on("mouseout", hideTooltip);
+            
+            svg.append("text").attr("y", -10).text("Total: 1591").style("text-anchor", "middle").style("fill", "black").style("font-size", "12px").style("font-weight", "bold");
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MentalStats: Explore</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+    
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-container">
+            <h1>MentalStats</h1>
+        </div>
+    </header>
+    <main>
+        <div class="layout-wrapper">
+            <nav class="sidebar">
+                <ul class="nav-links">
+                    <li><a href="index.html">Dashboard</a></li>
+                    <li><a href="analytics.html">Analytics</a></li>
+                    <li><a href="demographics.html">Demographics</a></li>
+                    <li><a href="#" class="active">Explore</a></li>
+                </ul>
+            </nav>
+            <div class="main-container">
+                
+                <div class="controls-container">
+                    <div class="control-group">
+                        <label>Start Month:</label>
+                        <select id="startMonth"></select>
+                    </div>
+                    <div class="control-group">
+                        <label>End Month:</label>
+                        <select id="endMonth"></select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Filter by Course:</label>
+                        <select id="courseFilter">
+                            <option value="all">All Courses</option>
+                            </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Filter by Gender:</label>
+                        <select id="genderFilter">
+                            <option value="all">All Genders</option>
+                            </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Stress Level:</label>
+                        <select id="severityFilter">
+                            <option value="default">No Sort</option>
+                            <option value="desc">High to Low</option>
+                            <option value="asc">Low to High</option>
+                            <optgroup class="opt-group" label="Filter Specific Level">
+                                <option value="Severe">Severe (81-100)</option>
+                                <option value="High">High (61-80)</option>
+                                <option value="Moderate">Moderate (41-60)</option>
+                                <option value="Mild">Mild (21-40)</option>
+                                <option value="Low">Low (0-20)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Age</th>
+                                <th>Gender</th>
+                                <th>Course / Program</th>
+                                <th>Stress Index Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-header-container">
+                <h2>MentalStats</h2>
+                    <div class="footer-information-container">
+                        <p>This website is for educational purposes only. This website is not for actual use and does not intend to be used for fraud or other illegal use</p>
+                    </div>
+            </div>
+        <div class="source-section-container">
+            <div class="source-header-container">
+                <h2>Sources</h2>
+                <div class="source-links-container">
+                    <a href="https://borealisdata.ca/dataset.xhtml?persistentId=doi:10.5683/SP3/VEIBVL">Borealis: University Student Mental Health</a>
+                    <a href="https://www.kaggle.com/datasets/shariful07/student-mental-health">Kaggle: Student Mental Health</a>
+                </div>
+            </div>
+        </div>
+            <div class="source-section-container">
+                <div class="source-header-container">
+                    <h2>Authored By:</h2>
+                    <div class="source-links-container">
+                        <p>Prinze Kyle Santiago</p>
+                    </div>
+                </div>
+                <div class="source-header-container">
+                    <h2>Section:</h2>
+                    <div class="source-links-container">
+                        <p>BSIT-3A</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+      // Global Variables
+        let rawData = [];
+        let uniqueMonths = [];
+
+        function getSeverityLabel(score) {
+            if (score <= 20) return "Low";
+            if (score <= 40) return "Mild";
+            if (score <= 60) return "Moderate";
+            if (score <= 80) return "High";
+            return "Severe";
+        }
+
+        // Load CSV and Process Data
+        d3.csv("Final Combined Dataset.csv").then(function(data) {
+            
+            const parseDate = d3.timeParse("%d/%m/%Y %H:%M");
+            const parseDateISO = d3.timeParse("%Y-%m-%d %H:%M:%S");
+            const formatMonth = d3.timeFormat("%b %Y"); 
+            const formatFullDate = d3.timeFormat("%Y-%m-%d %I:%M %p");
+
+            data.forEach(d => {
+                let date = parseDate(d.Timestamp);
+                if (!date) date = parseDateISO(d.Timestamp);
+                if (!date) date = new Date(d.Timestamp);
+
+                let score = +d["Stress Index Score"];
+
+                rawData.push({
+                    dateObj: date,
+                    dateStr: formatFullDate(date),
+                    monthStr: formatMonth(date),
+                    age: +d.Age,
+                    gender: d.Gender,
+                    course: d["Course/Program"],
+                    score: score,
+                    severity: getSeverityLabel(score)
+                });
+            });
+
+            rawData.sort((a, b) => a.dateObj - b.dateObj);
+
+            // Extract Uniques
+            uniqueMonths = [...new Set(rawData.map(d => d.monthStr))];
+            const uniqueCourses = [...new Set(rawData.map(d => d.course))].sort();
+            const uniqueGenders = [...new Set(rawData.map(d => d.gender))].sort();
+
+            // Populate
+            populateDropdown("startMonth", uniqueMonths, 0); 
+            populateDropdown("endMonth", uniqueMonths, uniqueMonths.length - 1);
+            populateDropdown("courseFilter", uniqueCourses);
+            populateDropdown("genderFilter", uniqueGenders);
+
+            // Listeners
+            document.getElementById("startMonth").addEventListener("change", updateTable);
+            document.getElementById("endMonth").addEventListener("change", updateTable);
+            document.getElementById("courseFilter").addEventListener("change", updateTable);
+            document.getElementById("genderFilter").addEventListener("change", updateTable);
+            document.getElementById("severityFilter").addEventListener("change", updateTable);
+
+            updateTable();
+
+        }).catch(err => {
+            console.error(err);
+            document.querySelector("tbody").innerHTML = "<tr><td colspan='5'>Error loading CSV.</td></tr>";
+        });
+
+        function populateDropdown(id, items, defaultIndex = null) {
+            const select = document.getElementById(id);
+            if (id === "startMonth" || id === "endMonth") select.innerHTML = "";
+
+            items.forEach(item => {
+                const opt = document.createElement("option");
+                opt.value = item;
+                opt.text = item;
+                select.appendChild(opt);
+            });
+
+            if (defaultIndex !== null) select.selectedIndex = defaultIndex;
+        }
+
+        // Update Table
+        function updateTable() {
+            // Get Values
+            const startStr = document.getElementById("startMonth").value;
+            const endStr = document.getElementById("endMonth").value;
+            const courseVal = document.getElementById("courseFilter").value;
+            const genderVal = document.getElementById("genderFilter").value;
+            const sevVal = document.getElementById("severityFilter").value;
+
+            // Date Range
+            const startIndex = uniqueMonths.indexOf(startStr);
+            const endIndex = uniqueMonths.indexOf(endStr);
+
+            if (startIndex > endIndex) {
+                document.querySelector("tbody").innerHTML = "<tr><td colspan='5' style='text-align:center; padding:20px;'>Invalid Date Range</td></tr>";
+                return;
+            }
+            const validMonths = uniqueMonths.slice(startIndex, endIndex + 1);
+
+            // Filter
+            let filtered = rawData.filter(d => {
+                if (!validMonths.includes(d.monthStr)) return false;
+                if (courseVal !== "all" && d.course !== courseVal) return false;
+                if (genderVal !== "all" && d.gender !== genderVal) return false;
+                
+                // Severity Filter (Specific Level)
+                const levels = ["Low", "Mild", "Moderate", "High", "Severe"];
+                if (levels.includes(sevVal)) {
+                    if (d.severity !== sevVal) return false;
+                }
+                return true;
+            });
+
+            // Sort
+            if (sevVal === "desc") { 
+                filtered.sort((a, b) => b.score - a.score);
+            } else if (sevVal === "asc") { 
+                filtered.sort((a, b) => a.score - b.score);
+            } else {
+                // Default: Chronological
+                filtered.sort((a, b) => a.dateObj - b.dateObj);
+            }
+
+            // Render
+            const tbody = d3.select("tbody");
+            tbody.html("");
+
+            if (filtered.length === 0) {
+                tbody.html("<tr><td colspan='5' style='text-align:center; padding:20px;'>No results match your filters.</td></tr>");
+                return;
+            }
+
+            const rows = tbody.selectAll("tr")
+                .data(filtered)
+                .enter()
+                .append("tr");
+
+            rows.append("td").text(d => d.dateStr);
+            rows.append("td").text(d => d.age);
+            rows.append("td").text(d => d.gender);
+            rows.append("td").text(d => d.course);
+            
+            rows.append("td").html(d => {
+                return `<span class="badge sev-${d.severity.toLowerCase()}">${d.score} (${d.severity})</span>`;
+            });
+        }
+    </script>
+</body>
+</html>
